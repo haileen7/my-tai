@@ -322,7 +322,7 @@ jobs:
             echo "[$i/330] Server is active (SSH + Laravel on port 8000)..."
           done
 
-      - name: 16. Sync hermes state & 9router data back to my-tail
+      - name: 16. Sync hermes state & 9router data back to my-tai
         if: always()
         env:
           GH_TOKEN: ${{ secrets.MY_PAT }}
@@ -331,7 +331,7 @@ jobs:
           git config user.name "haileen7"
           git config user.email "haileen7@users.noreply.github.com"
           # Authenticate with PAT for push
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/haileen7/my-tail.git"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/haileen7/my-tai.git"
 
           H=/home/runner/.hermes
           HDEST=hermes
@@ -363,7 +363,7 @@ jobs:
             # Pull first in case another run pushed before us
             git pull --rebase origin "${{ github.ref_name }}" || true
             git push origin "${{ github.ref_name }}" || echo '⚠️ Push failed — changes saved locally'
-            echo '✅ Hermes & 9router data synced to my-tail'
+            echo '✅ Hermes & 9router data synced to my-tai'
           fi
 
       - name: 17. Tailscale Logout (cleanup on shutdown)
