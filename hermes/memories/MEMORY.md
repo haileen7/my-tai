@@ -1,1 +1,3 @@
-
+h-dashboard workflow rules set by user: (1) every change is committed and pushed to the current server branch `baran` (remote origin = haileen7/h-dashboard, tracking beta); (2) when the user says "pr", open a PR from the current branch to the beta branch of github.com/asgarimehdi/h-dashboard, and never merge unless explicitly asked.
+§
+MCP state (2026-09-25): laravel_boost, context7, github verified working. codegraph binary was absent; installed npm package @colbymchenry/codegraph into ~/.npm-global/bin and ran `codegraph init` on h-dashboard (532 files / 7.8k nodes). MCP servers only register at session start, so codegraph tools show up next session; meanwhile use `codegraph query|explore` through the terminal.

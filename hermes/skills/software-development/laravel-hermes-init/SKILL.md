@@ -43,6 +43,8 @@ Record: remote names, current branch, any uncommitted changes. Never assume orig
 
 Read `AGENTS.md` (or `CLAUDE.md` / `.hermes.md`). These files define project-specific gotchas, conventions, and tool usage. Keep their instructions in context for the entire session.
 
+In Hermes, an `AGENTS.md` inside the project directory auto-attaches as **Subdirectory context** as soon as the session's cwd is inside that project — check whether you already received it before reading it again, and treat it as authoritative if present. If you never saw it, `search_files` for it explicitly; do not proceed on the assumption that it does not exist.
+
 ### 3. Verify MCP Tools
 
 Test each configured MCP server with a lightweight call:
@@ -54,9 +56,28 @@ Test each configured MCP server with a lightweight call:
 | GitHub MCP | `search_repositories` with repo name | JSON with matching repos |
 | CodeGraph | CLI: `codegraph explore "<symbol>"` | Symbol relationships |
 
-**Laravel Boost intermittent crash:** First MCP call may lose its stdio subprocess. Retry once — this is a known transient issue, not a config problem.
+**Server absent from `tool_search`:** MCP servers are registered once, at session start. If a configured server is missing from the `available_sources` list, fixing its config/binary now will NOT make it appear this session — it registers on the next session start. Confirm the server itself works (handshake below), then use its CLI equivalent for the rest of this session and expect the MCP tools next session. Re-run `tool_search` once after any fix rather than assuming.
+
+**Stdio handshake to verify a server independently of Hermes** (isolates "config broken" from "transient death"):
+
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}' \
+  | timeout 20 sh -c '<the exact command+args from ~/.hermes/config.yaml>'
+```
+
+A `result.serverInfo` line means the server is healthy — the failure was transport-side.
+
+**Laravel Boost intermittent crash:** the first MCP call may lose its stdio subprocess. The error tells you not to replay it blindly — verify the external state first (`php artisan boost:mcp` handshake as above), then retry the tool call exactly once.
 
 **MCP tools are local tools** — each must be called individually via `tool_call`. Cannot batch multiple local MCP tools in one call (only connectors can batch).
+
+**Fall back to the equivalent CLI the moment an MCP call fails, don't keep retrying.** Two failure shapes seen in practice, both with a working CLI answer:
+
+- `tool_call` returns `calls is not valid JSON: Expecting ',' delimiter` — the argument payload is being mangled, often by long bodies or non-ASCII text. Shortening the payload may work; if it keeps failing, switch tools rather than shrinking the message further.
+- `MCPError: Authentication Failed` — the server's token is stale even though the CLI is authenticated. Confirm with `gh auth status`, then drive the operation with `gh` (e.g. `gh pr create --repo <owner>/<repo> --base <base> --head <fork-user>:<branch> --title-file`/`--body-file`).
+
+Rule: verify the fallback actually produced the artifact (`gh pr view <n> --json url,state,mergeable`) before reporting success. Cross-repo PRs need the fork qualified as `head: <owner>:<branch>`; for a long body, write it to a scratch file and pass `--body-file` rather than inlining it.
 
 ### 4. Install CodeGraph if Missing
 
@@ -111,6 +132,20 @@ Push current branch to its configured remote after any work:
 git push origin HEAD
 ```
 
+**The local branch name and the remote branch it publishes to are often different** (e.g. a work branch configured to publish onto the fork's `beta`). Read the real destination instead of assuming:
+
+```bash
+git config branch.<current-branch>.remote   # which remote
+git config branch.<current-branch>.merge    # which remote branch (refs/heads/...)
+```
+
+Then push explicitly to that ref — a plain `git push` targets a same-named remote branch and errors when the configured merge ref differs:
+```bash
+git push <remote> HEAD:<branch-from-merge-config>
+```
+
+Before syncing, confirm the three positions (`HEAD`, fork branch, canonical branch) with `git rev-parse` and `git ls-remote <canonical-url> refs/heads/<branch>`; if they already agree there is nothing to pull or push — report "in sync" instead of manufacturing a commit.
+
 ## Pitfalls
 
 - **Pip vs npm CodeGraph:** Running `pip install codegraph` installs a completely different tool. The MCP config expects `@colbymchenry/codegraph` from npm. If `codegraph explore` returns usage text about matplotlib or D3.js instead of symbol data, you installed the wrong one — `pip uninstall codegraph && npm install -g @colbymchenry/codegraph`.
@@ -118,3 +153,8 @@ git push origin HEAD
 - **MCP server crash on first call:** Laravel Boost's stdio subprocess occasionally dies. This is transient — retry the call. If it persists across multiple retries, the PHP artisan process may need a restart.
 - **Never batch local MCP tools:** `tool_call` with multiple local (non-connector) tool entries is rejected. Call each MCP tool individually.
 - **`git remote -v` is ground truth:** Never assume which remote is 'origin' vs 'upstream'. Some forks rename remotes differently.
+- **A shared branch may be behind the canonical one after you fetch it.** When a fork branch tracks (or is published to) an upstream branch, compare with `git rev-list --left-right --count <canonical-sha>...HEAD` — a non-zero left count means work is missing even though the local tree looks clean. Fast-forward with `git merge --ff-only`, after stashing any dirty file only if the stash is truly redundant (compare the stashed blob against the target commit first, then drop it).
+
+## Reporting While Long Commands Run
+
+Full test suites and Playwright runs take minutes. Start them in the background, then either continue work that does not depend on the result or report progress on a short interval — do not go silent until completion. The user should never have to ask what is happening. State the real numbers (`N passed`, `0 failed`, plus any pre-existing risky/skipped count) and never round a partially-verified run up to a pass.
