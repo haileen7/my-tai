@@ -6,8 +6,8 @@ description: >-
   services, model/provider SDKs, fast-moving product behavior, user requests for
   latest/current/official behavior, unfamiliar repo docs/specs, errors that may
   indicate API drift, or high-stakes auth, security, billing, data, migration,
-  deployment, compliance, or privacy behavior. Forces the agent to web-search for
-  current official docs and read primary docs before assuming from memory.
+  deployment, compliance, or privacy behavior. Forces the agent to web-search
+  for current official docs and read primary docs before assuming from memory.
 ---
 
 # Read The Damn Docs
@@ -97,7 +97,7 @@ after the authoritative contract is known.
 - "Wire up Stripe webhooks." Read Stripe's current signature verification,
   event retry, endpoint secret, and framework body-parsing docs before coding.
 - "Fix this Next.js caching bug." Read the docs for the installed Next.js major
-  and router mode before assuming cache validation semantics.
+  and router mode before assuming cache invalidation semantics.
 - "Add Drizzle migrations." Read the current Drizzle kit docs and existing repo
   migration conventions before generating files.
 - "Create a GitHub Action." Read official Actions syntax and permissions docs,

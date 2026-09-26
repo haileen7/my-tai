@@ -47,7 +47,14 @@ In Hermes, an `AGENTS.md` inside the project directory auto-attaches as **Subdir
 
 ### 3. Verify MCP Tools
 
-Test each configured MCP server with a lightweight call:
+**Start with the built-in probe** — it reports transport, auth, and tool discovery per server in one shot, and separates "binary/config broken" from "tool call failed" without hand-rolling JSON-RPC:
+
+```bash
+hermes mcp list      # which servers are configured and enabled
+hermes mcp test <name>   # ✓ Connected + tools discovered, or the failing stage
+```
+
+Then confirm each server with a live, cheap call:
 
 | Server | Test call | Expected |
 |---|---|---|
@@ -122,9 +129,18 @@ codegraph explore "<known class or method>"
 ### 6. Sync with Upstream
 
 ```bash
-git fetch upstream
-git log --oneline upstream/beta..HEAD   # commits ahead of beta
-git log --oneline HEAD..upstream/beta   # commits behind beta
+# Prefer the configured remote when one actually points at the canonical repo.
+git fetch <canonical-remote> <canonical-branch>
+git rev-list --count HEAD..<canonical-remote>/<canonical-branch>   # behind
+git rev-list --count <canonical-remote>/<canonical-branch>..HEAD   # ahead
+```
+
+When no remote points at the canonical repo, fetch by URL into `FETCH_HEAD` instead of adding a remote (adding one violates the standing rules):
+
+```bash
+git fetch <canonical-url> <canonical-branch>
+git rev-list --count HEAD..FETCH_HEAD      # behind
+git log --oneline -1 FETCH_HEAD            # what you are comparing against
 ```
 
 Push current branch to its configured remote after any work:
@@ -149,10 +165,12 @@ Before syncing, confirm the three positions (`HEAD`, fork branch, canonical bran
 ## Pitfalls
 
 - **Pip vs npm CodeGraph:** Running `pip install codegraph` installs a completely different tool. The MCP config expects `@colbymchenry/codegraph` from npm. If `codegraph explore` returns usage text about matplotlib or D3.js instead of symbol data, you installed the wrong one — `pip uninstall codegraph && npm install -g @colbymchenry/codegraph`.
-- **CodeGraph not in PATH:** After npm install, the binary lands at the npm global prefix (check with `npm config get prefix`). The MCP server config in `~/.hermes/config.yaml` must match this path.
+- **CodeGraph not in PATH:** After npm install, the binary lands at the npm global prefix (check with `npm config get prefix`). The MCP server config in `~/.hermes/config.yaml` must match this path. The MCP subprocess gets the absolute path, but your interactive shell may not have that directory on PATH — a `codegraph: command not found` from the terminal while `hermes mcp test codegraph` connects is exactly this. Prefix the session with `export PATH="$HOME/.npm-global/bin:$PATH"` or call the absolute path.
+- **`codegraph init` is not instant on a large repo.** It walks the whole tree and builds the SQLite graph; run it with `background=true, notify=true` and do other work while it finishes rather than blocking the turn on it.
 - **MCP server crash on first call:** Laravel Boost's stdio subprocess occasionally dies. This is transient — retry the call. If it persists across multiple retries, the PHP artisan process may need a restart.
 - **Never batch local MCP tools:** `tool_call` with multiple local (non-connector) tool entries is rejected. Call each MCP tool individually.
 - **`git remote -v` is ground truth:** Never assume which remote is 'origin' vs 'upstream'. Some forks rename remotes differently.
+- **Per-instance agent notes are not repo content.** Bootstrapping tools drop scratch files in the project dir (`.hermes.md` and friends) and they show up as untracked noise. When the rule is "commit every change", gitignore these beside the existing agent dirs rather than committing them — they carry this instance's paths, not project knowledge. Commit the `.gitignore` line; leave the file untracked.
 - **A shared branch may be behind the canonical one after you fetch it.** When a fork branch tracks (or is published to) an upstream branch, compare with `git rev-list --left-right --count <canonical-sha>...HEAD` — a non-zero left count means work is missing even though the local tree looks clean. Fast-forward with `git merge --ff-only`, after stashing any dirty file only if the stash is truly redundant (compare the stashed blob against the target commit first, then drop it).
 
 ## Reporting While Long Commands Run

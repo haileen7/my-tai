@@ -154,6 +154,18 @@ bash scripts/e2e-test.sh                     # then the full run
 Run the targeted e2e suite first: the full Playwright run is long, and a selector
 bug found in 2 minutes is cheaper than one found in 15.
 
+**Pint runs first, so a green test run goes stale.** `pint --dirty` rewrites code
+and some fixers change semantics, not just formatting (a keyed collection method
+being replaced with an equivalent-looking one that keys by index instead of id is
+the classic). A suite that passed before Pint proves nothing after it. Always
+re-run the tests *after* the formatter, and when a fixer touches a line you care
+about, re-read the function — do not trust that the diff is cosmetic.
+
+**PHPStan clean is not "correct".** It proves types line up; it cannot see that a
+map you built is keyed wrongly. The tests are what catch that, which is exactly
+why the gates are ordered formatter → analyser → tests, and why the test re-run
+after Pint is not optional.
+
 ### 7. Red CI after pushing
 
 Read the failing job, don't guess at it. `gh run view <run-id> --job <job-id>
@@ -164,7 +176,6 @@ on forks". If the failure reproduces at the upstream base commit in a throwaway
 worktree, it predates this change: say so in the report and offer the fix as
 separate work instead of widening the diff. Full probe order in
 `laravel-feature-testing` → `references/red-test-attribution.md`.
-
 If a terminal security guard refuses a vendor binary because of its size, invoke
 it through a shell: `sh -c 'php vendor/bin/pint ...'`.
 
@@ -193,7 +204,7 @@ record. Then commit, push to the current branch, and open the PR.
   "is this pre-existing?" decisively, reproduce it in a throwaway
   `git worktree add` of the upstream base commit rather than arguing from the diff.
   Report the verdict with the evidence instead of silently re-running until green.
-  See `laravel-feature-testing` → `references/red-test-attribution.md`.
+  Full probe order in `laravel-feature-testing` → `references/red-test-attribution.md`.
 - **View-scope variables.** Inside a table `@scope` slot, a bare `$editingId` is
   undefined; use `$this->editingId`.
 - **Factory `$this->unique()`** is not available on the factory — use
@@ -204,3 +215,45 @@ record. Then commit, push to the current branch, and open the PR.
   route gated on permission B produces an item that either leaks or 403s.
 - **External API calls in a Livewire action** catch `Throwable` and surface the
   message; never let them bubble into a 500.
+- **A RED that is really your test's bug.** When several new tests fail at once,
+  check whether the failures share one helper or one assertion shape before
+  touching production code. A helper returning column-letter keys, an assertion
+  aimed at the wrong field, or a value read back as `string` where you expected
+  `int` makes many tests fail for a single non-feature reason. Dump the actual
+  intermediate values before concluding the feature is broken.
+- **A test that passes immediately may be your own earlier code.** If a slice
+  "only needed plumbing" and you wrote that plumbing before its test existed, the
+  next slice's test passes on first run and proves nothing. Delete the untested
+  production code and re-derive it from a test you watch fail; a green that was
+  never red is the signature of this.
+- **Recursive CTE on a user-editable adjacency list never terminates.** A
+  hierarchy walk written `WITH RECURSIVE ... UNION ALL` does not dedupe, so one
+  bad `parent_id` cycle makes it recurse forever — the connection hangs and the
+  suite dies instead of failing. `UNION` breaks the cycle and returns identical
+  rows on acyclic data. Use `UNION` for any walk over a column users can edit, and
+  probe the shape with a bounded timeout before trusting a test of it:
+
+  ```sql
+  SET statement_timeout = '3s';
+  -- cycle + UNION ALL => "canceling statement due to statement timeout"
+  -- cycle + UNION     => returns the finite row set
+  ```
+
+  If a run hangs, recover the session rather than waiting it out:
+  `pg_terminate_backend(pid)` for active backends on the test database. A test for
+  the guard belongs on in-memory models so the suite can never wedge on the
+  hazard it is documenting.
+- **Verify a hazard is reachable before reporting it.** A query that *would* hang
+  on cyclic data is only a live risk if some unguarded path can produce that data.
+  Check the form guard, the API guard and the seeders; when a guard makes the
+  cycle unreachable, call the query fragile rather than claiming users can trigger
+  it. Check the *type/permission* graph for cycles too, not just the data — a
+  relationship table that looks cyclic at a glance is often a DAG once you run
+  a proper cycle check on it. Speculative hazard reports cost the reader trust in
+  the rest of the report.
+- **File downloads are plain `<a href>`, never `wire:click`.** Livewire cannot
+  return a binary file response. Test that the control is an anchor pointing at
+  the route, not only that the route exists. Reading the generated file back to
+  assert on its rows — the `toArray` cell-ref trap, numbers returning as strings,
+  and why `Excel::fake()` is not enough — is in
+  `references/testing-generated-files.md`.
