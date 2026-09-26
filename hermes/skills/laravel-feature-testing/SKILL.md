@@ -55,6 +55,12 @@ document.
    Before believing any mass-failure count, run `pgrep -af 'pest|artisan test'`,
    stop the strays, and re-run once alone. See
    `references/red-test-attribution.md`.
+7. **A test is evidence only if it fails for the stated reason.** Two ways a test
+   lies: the stored data it needs is rewritten before it is ever persisted, so it
+   exercises a state the application cannot reach; or a multi-column match is
+   already satisfied by a sibling field, so the assertion never reaches the code
+   under test. Prove the fixture survives a write round-trip before writing the
+   test, and make every non-target field in it non-matching. See the pitfalls.
 
 ## Procedure
 
@@ -83,6 +89,31 @@ document.
 
 ## Pitfalls
 
+- **A model write hook can make the "bad data" unreachable.** Before writing a
+  regression test that persists malformed stored data — mixed script, an
+  unnormalised character, a legacy spelling — check whether the model already
+  rewrites it on write: `static::saving` / `creating` hooks, `Attribute` mutators,
+  casts, observers. A `saving` hook that normalises a name makes that name
+  impossible to persist, so the test can only fail through a path the app never
+  takes and any "fix" for it is dead code. Reachability is then limited to rows
+  written before the hook, imports, or fixtures that bypass the ORM — decide which
+  of those you mean before writing the test, and say so in the report. Prove it
+  with a round-trip (`Model::create([...])`, then read the column back and inspect
+  its code points); do not reason from the attribute setter alone.
+- **Never insert probe rows with `DB::table()->insert()` when the question is
+  about what the application stores.** The query builder skips model events and
+  accessors, so it will happily write states no code path can produce and you will
+  "discover" a bug that does not exist. Use the model, or `Model::insert()` if you
+  need a single insert, and re-read through the model to confirm what landed.
+- **A new test that passes against the unfixed code is not a passing test.** It is
+  passing through a branch you did not mean to exercise: an `OR` group whose
+  sibling column also matches, a component that renders the value in a second
+  place, or a default that already satisfies the assertion. Make every non-target
+  field in the fixture non-matching so only the code under test can satisfy it, and
+  pin values the factory draws at random — localized names collide with localized
+  search terms often enough to matter. If a test still cannot be made to fail
+  without the fix, it documents existing behaviour: label it as such or drop it
+  rather than filing it as a regression guard.
 - **`syncPermissions` replaces the role's whole set; it does not add to it.**
   Calling it with a partial list inside a permission seeder strips the role of
   every permission left out, so adding one new permission to a seeder can lock

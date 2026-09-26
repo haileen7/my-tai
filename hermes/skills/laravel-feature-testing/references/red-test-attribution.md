@@ -52,24 +52,31 @@ the runner printed, not forming a hypothesis about the source.
 
 ## Probe 3: prove it against the baseline
 
-The decisive test for "is this pre-existing?". Build a throwaway checkout at the
-upstream base commit and reproduce there — the working tree stays untouched.
+The decisive test for "is this pre-existing?" — run the same test against the
+pre-change code and confirm it behaves differently there.
+
+**Do it in the working tree by checking out only the changed paths, then restore.**
 
 ```bash
-git worktree add -q /tmp/base <upstream-base-sha>
-cd /tmp/base
-ln -s /path/to/repo/vendor vendor      # reuse the installed dependencies
-cp /path/to/repo/.env .env             # same DB credentials the failing run used
-php /path/to/repo/vendor/bin/pest tests/Feature/FooTest.php --filter=test_specific_method
-git worktree remove --force /tmp/base   # always clean this up
+git checkout <pre-change-sha> -- app/Services/Thing.php resources/views/thing.blade.php
+php artisan test tests/Feature/ThingTest.php --filter=test_specific_method
+git checkout HEAD  -- app/Services/Thing.php resources/views/thing.blade.php
+php artisan test tests/Feature/ThingTest.php --filter=test_specific_method
 ```
 
-If the base reproduces the failure, the bug predates the work. Say so explicitly in
-the report, name the failure, and stop bisecting your own change — offer the
-infrastructure fix as separate work rather than folding it into the current diff.
+Only the paths under review move, so the dependency tree is never duplicated and
+the restore is one `git checkout`. Check `git status` first — the restore is only
+lossless while you hold no uncommitted work in those paths.
 
-Symlinking `vendor` and copying `.env` is what makes this cheap: no second install,
-no second database, and the base run is otherwise identical to the failing one.
+**Never symlink `vendor` into a second checkout to "reuse the dependencies".**
+Composer's autoloader derives its base from `$baseDir = dirname($vendorDir)` in
+`vendor/composer/autoload_psr4.php`, and `dirname()` resolves through a symlink to
+the *original* repository. The second checkout then boots the original's `app/`,
+`config/` and test tree: the run reproduces the baseline's **pass** result while
+executing none of the code you meant to isolate. The tell is a result byte-identical
+to the main tree's. If a separate checkout is truly unavoidable, copy the `vendor`
+directory or run `composer install` inside it — and treat a suspiciously green
+baseline run as evidence of this failure, not of a fixed bug.
 
 ## Reading the failure out of CI
 
@@ -115,3 +122,12 @@ Fixes, in order of preference:
 Adding a heavy seeder call to many `beforeEach` blocks widens the window in which
 this can happen, so a fix that works today can start failing tomorrow as fixtures
 grow. Prefer fixing the database isolation over trimming the fixture.
+
+## A baseline run that comes back all-green
+
+When every test in the file passes against the pre-change code, the pre-change code
+is not running. Check, in order: is `vendor` a symlink (Probe 3 above); is the
+framework binary invoked by absolute path from the *original* repo; is a compiled
+or cached artefact (view cache, route cache, config cache, opcache) serving the old
+source. The fix is the same one that makes any red run credible — prove the code
+under test is the code being executed before believing the result.
