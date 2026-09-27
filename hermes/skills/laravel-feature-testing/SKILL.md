@@ -1,6 +1,6 @@
 ---
 name: laravel-feature-testing
-description: "Add or fix Laravel tests and keep the quality gates green."
+description: "Add/fix Laravel tests, run quality gates, verify incoming PRs."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -19,7 +19,8 @@ change broke, and running the gates that must be green before the work ships.
 
 **This skill vs test-driven-development:** that one enforces RED-GREEN discipline;
 this one carries the Laravel mechanics — fixtures, Livewire interaction, browser
-specs, and the static-analysis gates that run beside the suite.
+specs, the static-analysis gates that run beside the suite, and the workflow for
+reproducing an incoming change's suite in isolation.
 
 **The project's AGENTS.md / CLAUDE.md overrides this skill** on commands, seeders,
 and which tiers exist. Read it first; this skill carries only what it does not
@@ -31,6 +32,9 @@ document.
 - A change touching routes, permissions, seeders, Blade components, cache namespaces,
   or factories — i.e. anything other tests may have pinned
 - Before commit, when a gate must be shown green with real numbers
+- **Verifying someone else's work** — "check PR #N", "is this change correct",
+  "does this patch actually work" — where you must run their suite rather than your
+  own working tree. See `references/verifying-an-incoming-change.md`
 
 ## Always-On Rules
 
@@ -55,12 +59,23 @@ document.
    Before believing any mass-failure count, run `pgrep -af 'pest|artisan test'`,
    stop the strays, and re-run once alone. See
    `references/red-test-attribution.md`.
-7. **A test is evidence only if it fails for the stated reason.** Two ways a test
+7. **A test is evidence only if it fails for the stated reason.** Three ways a test
    lies: the stored data it needs is rewritten before it is ever persisted, so it
-   exercises a state the application cannot reach; or a multi-column match is
+   exercises a state the application cannot reach; a multi-column match is
    already satisfied by a sibling field, so the assertion never reaches the code
-   under test. Prove the fixture survives a write round-trip before writing the
-   test, and make every non-target field in it non-matching. See the pitfalls.
+   under test; or it asserts only the **first** render of a stateful component, never
+   the state after a round-trip. Prove the fixture survives a write round-trip before
+   writing the test, make every non-target field in it non-matching, and for any
+   stateful component drive one `->call(...)` before asserting. See the pitfalls.
+8. **Assert the exact rendered value, and assert absence too.** A presence-only
+   match (`toContainText('نفر')`) passes when the value is wrong (`0 نفر`), and an
+   assertion that a negative marker exists (`خالی`, "empty") passes vacuously once a
+   bug makes that marker appear on every row. Pin the number, and for negative
+   markers assert both presence on the empty case and absence on the populated one.
+9. **Prove a claimed bug yourself before reporting it.** A probe test whose expected
+   value is hardcoded (rather than read from the database) will happily certify broken
+   code as correct when a seeder or factory made the real count differ. Print the DB
+   count in the same run; a `BEFORE` mismatch means the probe is wrong, not the code.
 
 ## Procedure
 
@@ -89,6 +104,22 @@ document.
 
 ## Pitfalls
 
+- **A Livewire component that is correct on first render can be wrong on every
+  render after.** Public properties holding Eloquent models/collections are
+  rehydrated from primary keys only, via a bare `select *` — so `withCount`,
+  `withSum`, eager loads, and appended attributes are all gone after the first
+  interaction. A `?? 0` fallback turns that into "every row silently reads as
+  empty" rather than an error. Keep computed data in a scalar `array $counts`
+  keyed by id instead. Full mechanism, inspection recipe, and the before/after probe
+  in `references/livewire-hydration.md`.
+- **A test that only ever asserts the first mount of a stateful component proves
+  nothing about its behaviour.** `Livewire::test('x')->assertSee('1 نفر')` with no
+  `->call()` never crosses a dehydrate/rehydrate boundary, so the whole class of bugs
+  above is invisible to it. Drive one interaction first.
+- **A "negative" assertion is vacuous once the bug makes the marker universal.** If a
+  defect causes the empty/vacant badge to render on every node, then
+  `assertSee('خالی')` on "the empty unit" still passes. Assert the marker is absent
+  on the populated row, or assert the exact total count of markers.
 - **A model write hook can make the "bad data" unreachable.** Before writing a
   regression test that persists malformed stored data — mixed script, an
   unnormalised character, a legacy spelling — check whether the model already
@@ -170,3 +201,11 @@ document.
 - `references/red-test-attribution.md` — the ordered probes for deciding whether a
   red run is yours, self-inflicted contention, or a pre-existing infrastructure bug,
   plus how to read a failing CI job.
+- `references/livewire-hydration.md` — what Livewire drops on every round-trip
+  (`withCount`, eager loads, appended attributes), how to spot it by inspection, and
+  the before/after probe template that exposes state that is correct on first render
+  and wrong after any click.
+- `references/verifying-an-incoming-change.md` — reproducing someone else's suite in
+  a detached worktree to decide whether a change is sound: the `vendor/` symlink that
+  produces a false green, missing asset builds, the test-database step, and how to
+  separate a regression from a pre-existing defect.

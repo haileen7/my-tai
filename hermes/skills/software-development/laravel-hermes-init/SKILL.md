@@ -162,7 +162,26 @@ git push <remote> HEAD:<branch-from-merge-config>
 
 Before syncing, confirm the three positions (`HEAD`, fork branch, canonical branch) with `git rev-parse` and `git ls-remote <canonical-url> refs/heads/<branch>`; if they already agree there is nothing to pull or push — report "in sync" instead of manufacturing a commit.
 
+**A fast-forward that lands a dependency bump leaves the installed tree stale.**
+`git merge` only moves tracked files — it never runs a package manager, so
+`composer.lock` and `vendor/` (or `package-lock.json` and `node_modules/`) can
+now contradict the manifest you just pulled. After any merge touching a
+manifest, confirm reality before trusting a build or an MCP probe:
+
+```bash
+composer show <package>            # installed version
+composer validate --with-dependencies
+npm ls <package> --depth=0        # or: search_files target='files' over node_modules
+```
+
+An MCP/CLI probe that reports a version older than the new constraint means the
+manifest moved but the install did not — run the installer, then re-probe. Do not
+report the merged dependency as active until `composer show` / `npm ls` agrees
+with the new constraint.
+
 ## Pitfalls
+
+- **Staged changes already in `git status` at session start are residue, not your work.** A `D`/`M` in the left column is a previous session's staging area. Read it before syncing: `git diff --cached --stat` plus `git diff` tells you whether the index holds a real decision or leftover bookkeeping. Fold it into the sync (commit it, or restore it) rather than letting it silently block the next merge.
 
 - **Pip vs npm CodeGraph:** Running `pip install codegraph` installs a completely different tool. The MCP config expects `@colbymchenry/codegraph` from npm. If `codegraph explore` returns usage text about matplotlib or D3.js instead of symbol data, you installed the wrong one — `pip uninstall codegraph && npm install -g @colbymchenry/codegraph`.
 - **CodeGraph not in PATH:** After npm install, the binary lands at the npm global prefix (check with `npm config get prefix`). The MCP server config in `~/.hermes/config.yaml` must match this path. The MCP subprocess gets the absolute path, but your interactive shell may not have that directory on PATH — a `codegraph: command not found` from the terminal while `hermes mcp test codegraph` connects is exactly this. Prefix the session with `export PATH="$HOME/.npm-global/bin:$PATH"` or call the absolute path.
@@ -170,7 +189,7 @@ Before syncing, confirm the three positions (`HEAD`, fork branch, canonical bran
 - **MCP server crash on first call:** Laravel Boost's stdio subprocess occasionally dies. This is transient — retry the call. If it persists across multiple retries, the PHP artisan process may need a restart.
 - **Never batch local MCP tools:** `tool_call` with multiple local (non-connector) tool entries is rejected. Call each MCP tool individually.
 - **`git remote -v` is ground truth:** Never assume which remote is 'origin' vs 'upstream'. Some forks rename remotes differently.
-- **Per-instance agent notes are not repo content.** Bootstrapping tools drop scratch files in the project dir (`.hermes.md` and friends) and they show up as untracked noise. When the rule is "commit every change", gitignore these beside the existing agent dirs rather than committing them — they carry this instance's paths, not project knowledge. Commit the `.gitignore` line; leave the file untracked.
+- **Per-instance agent notes are not repo content.** Bootstrapping tools drop scratch files in the project dir (`.hermes.md` and friends) and they show up as untracked noise. When the rule is "commit every change", gitignore these beside the existing agent dirs rather than committing them — they carry this instance's paths, not project knowledge. Commit the `.gitignore` line; leave the file untracked. **But check whether canonical upstream has since made the same call** (`git log canonical/<base> -- <path>`): if it deleted the file and ignored it, take upstream's version of that decision and do not re-add it locally.
 - **A shared branch may be behind the canonical one after you fetch it.** When a fork branch tracks (or is published to) an upstream branch, compare with `git rev-list --left-right --count <canonical-sha>...HEAD` — a non-zero left count means work is missing even though the local tree looks clean. Fast-forward with `git merge --ff-only`, after stashing any dirty file only if the stash is truly redundant (compare the stashed blob against the target commit first, then drop it).
 
 ## Reporting While Long Commands Run

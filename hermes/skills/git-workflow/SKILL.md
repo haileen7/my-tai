@@ -40,13 +40,34 @@ Fetch the URL separately (`git ls-remote <url> <branch>`) to confirm the
 upstream SHA before merging — a fork's own tracking branch can be stale or
 diverged, and comparing against it answers the wrong question.
 
-**A local untracked file that upstream now tracks will abort the fast-forward**
-with `untracked working tree files would be overwritten by merge`. This happens
-when a boot-time file (`AGENTS.md`, `.hermes.md`, editor settings) is written
-locally on every session start and later committed upstream. Delete the local copy,
-merge, let the tracked version land, then diff the two to confirm nothing local
-was lost. Do not resolve it by adding the path to `.git/info/exclude` — that
-guarantees a permanent divergence from upstream.
+**Two different local-state blockers abort a `--ff-only` merge.** Diagnose which
+one you hit by reading the exact error line before acting.
+
+1. `untracked working tree files would be overwritten by merge` — a boot-time
+   file (`AGENTS.md`, `.hermes.md`, editor settings) was written locally every
+   session start and later committed upstream. Delete the local copy, merge, let
+   the tracked version land, then diff the two to confirm nothing local was lost.
+   Do not resolve it by adding the path to `.git/info/exclude` — that guarantees a
+   permanent divergence from upstream.
+2. `Your local changes to the following files would be overwritten by merge` — an
+   already-TRACKED file carries a local diff and upstream also changed it, so the
+   fast-forward cannot apply cleanly. Do NOT blind `git checkout -- <file>`: that
+   silently discards local work. Diff first, then branch on the answer:
+   ```bash
+   git diff <file>                  # what local change exists
+   git diff HEAD canonical/<base> -- <file>   # what upstream changed
+   ```
+   - If the two diffs are **identical**, the local edit is a duplicate of upstream's
+     (common after a manual dependency bump on one server) — `git checkout -- <file>`
+     then merge; the incoming change lands the same content anyway.
+   - If they **differ**, `git stash push -- <file>`, merge, then `git stash pop` and
+     resolve the conflict deliberately.
+
+**A stale boot file that upstream has since IGNORED needs no merge action at all.**
+Check `git log canonical/<base> -- <path>` before deleting anything: if the commit
+trajectory is delete + add to `.gitignore`, the correct move is to let the merge
+land and drop the local copy only if it still exists afterwards. Deleting eagerly
+as a reflex removes a file the user may still want.
 
 ### Nested `.git` directories when copying content
 
