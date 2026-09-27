@@ -41,6 +41,12 @@ document.
 1. **See it red first.** Write the test, run only that file, and watch it fail for
    the reason you intended. A test never observed red proves nothing — a passing
    test you just wrote may be passing because it asserts nothing about your change.
+2. **Prove the test database exists before launching a suite.** Check it as a
+   one-line query, and create it (from the project's own spatial/extension
+   template) if absent. A missing test database does not abort the run at startup —
+   it surfaces as a *subset* of tests failing with `does not exist` while the rest
+   pass, which reads exactly like an infrastructure hiccup and invites a pointless
+   re-run. Verify presence once, then the suite's results mean what they say.
 2. **Two tiers, both green.** The framework suite (fast, full) and the browser spec
    suite (slower, environment-swapping) exercise different layers; a feature is not
    done on one tier. Report both with their pass counts.
@@ -104,6 +110,12 @@ document.
 
 ## Pitfalls
 
+- **"Only some tests failed with a missing-database error" is a database that
+  genuinely does not exist, not a flake.** Those two explanations are
+  indistinguishable from the failure text alone, and re-running the suite to "rule
+  out a hiccup" burns minutes to reach the same state. List the test databases
+  first; a missing one is fixed with the create-database step, an existing one is
+  the real race worth investigating.
 - **A Livewire component that is correct on first render can be wrong on every
   render after.** Public properties holding Eloquent models/collections are
   rehydrated from primary keys only, via a bare `select *` — so `withCount`,

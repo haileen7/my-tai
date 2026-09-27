@@ -179,7 +179,30 @@ manifest moved but the install did not — run the installer, then re-probe. Do 
 report the merged dependency as active until `composer show` / `npm ls` agrees
 with the new constraint.
 
+### 7. Prove the Graph After a Sync
+
+A fast-forward that lands new classes leaves a stale `.codegraph/` index, and the
+new code is exactly what you will be asked about next. Re-index, then resolve one
+of the new symbols to confirm the graph sees the pull:
+
+```bash
+codegraph sync                                  # or: codegraph init
+codegraph query "<NewClassName>"                 # query = symbol + its references
+codegraph explore "<NewClassName>"               # explore = relationships/call paths
+```
+
+`query` answers "where is this symbol used" (definitions, imports, call sites);
+`explore` answers "what does this touch". Use `query` for a quick post-sync proof,
+`explore` before changing a symbol's contract. Doing this unprompted also makes
+tool usage visible instead of leaving it for the user to ask about.
+
 ## Pitfalls
+
+- **Do not repeat a `cd` that already succeeded.** The terminal session's cwd
+  persists between calls, so the first `cd <dir>` moves you in and the second
+  `cd <dir>` fails with "No such file or directory" — the shell is *already*
+  there, the path is not missing. Either omit the `cd` on later calls or pass an
+  absolute path / the `workdir` parameter.
 
 - **Staged changes already in `git status` at session start are residue, not your work.** A `D`/`M` in the left column is a previous session's staging area. Read it before syncing: `git diff --cached --stat` plus `git diff` tells you whether the index holds a real decision or leftover bookkeeping. Fold it into the sync (commit it, or restore it) rather than letting it silently block the next merge.
 
@@ -195,3 +218,13 @@ with the new constraint.
 ## Reporting While Long Commands Run
 
 Full test suites and Playwright runs take minutes. Start them in the background, then either continue work that does not depend on the result or report progress on a short interval — do not go silent until completion. The user should never have to ask what is happening. State the real numbers (`N passed`, `0 failed`, plus any pre-existing risky/skipped count) and never round a partially-verified run up to a pass.
+
+A `wait` on a background process is capped by a configured timeout and will be
+released early with the process still running — that release is not a failure and
+not the end of your turn. Reply with what is still pending and let the completion
+notification arrive on its own; do not re-issue the wait in a loop.
+
+**Verify seeder/table names instead of guessing them.** Seeders report row counts
+in prose, and a guessed singular table name throws `relation "x" does not exist`
+that aborts the rest of a counting loop, hiding the tables that would have
+worked. Get the real names from `php artisan db:show` and count those.
