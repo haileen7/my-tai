@@ -63,6 +63,25 @@ one you hit by reading the exact error line before acting.
    - If they **differ**, `git stash push -- <file>`, merge, then `git stash pop` and
      resolve the conflict deliberately.
 
+**One long-lived working branch cannot carry a second open PR.** GitHub allows only one open PR per (head, base) pair, so a server branch that accumulates several unrelated features across sessions can never open a clean, single-topic PR — `gh pr create` fails with *"a pull request for branch X into branch Y already exists"*. Do not merge the new work into the stale PR and do not close it without asking; the previous PR may be someone's reviewed work.
+
+Build a throwaway feature branch from the canonical base instead, and move only the new commits onto it:
+
+```bash
+git fetch https://github.com/<owner>/<repo>.git <base>:refs/remotes/canonical/<base>
+git branch <topic-slug> canonical/<base>
+git checkout <topic-slug>
+git cherry-pick <new-commit> [<new-commit> ...]   # NOT the older ones already in the open PR
+# re-verify the gates on the new base, then:
+git push -u origin <topic-slug>
+gh pr create --repo <owner>/<repo> --base <base> --head <fork>:<topic-slug> --title "..." --body-file pr-body.md
+git checkout <server-branch>                        # leave the server branch as it was
+```
+
+Cherry-pick only the commits belonging to this change, then confirm the branch is clean relative to the base before pushing: `git log --oneline canonical/<base>..HEAD` and `git diff --stat canonical/<base>..HEAD`. A cherry-pick that silently drags in unrelated files (because an earlier commit touched them too) shows up immediately in that diff — check it, don't assume.
+
+Note: the GitHub **MCP tools** may be authenticated to a different account (or not at all) than the `gh` CLI. If `mcp__github__create_pull_request` fails with `Requires authentication` while `gh auth status` is green, use `gh` instead — do not report the push/PR as blocked.
+
 **A stale boot file that upstream has since IGNORED needs no merge action at all.**
 Check `git log canonical/<base> -- <path>` before deleting anything: if the commit
 trajectory is delete + add to `.gitignore`, the correct move is to let the merge
