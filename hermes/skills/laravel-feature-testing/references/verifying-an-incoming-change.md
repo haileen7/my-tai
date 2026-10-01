@@ -50,12 +50,38 @@ gate's tail as the evidence, and report counts per tier.
   php -r 'echo realpath("vendor"), PHP_EOL;'   # must point inside the worktree
   ```
 
-- **Page-rendering tests need the built assets.** A missing `public/build/manifest.json`
-  fails every page test with an unrelated Vite error, which reads like a real
-  regression. Check for the build directory and copy it in from the main repo.
-- **The test database may not exist yet.** Create it from the project's template
-  (PostGIS/Postgres projects: `TEMPLATE=template_postgis`) before blaming the suite;
-  the symptom is a scattering of "database does not exist" across an otherwise green run.
+- **Page-rendering tests need the built assets — but rebuild them if the change
+  touches frontend source.** A missing `public/build/manifest.json` fails every page
+  test with an unrelated Vite error, which reads like a real regression. Copying the
+  main repo's `public/build/` in is only safe when the change is backend-only; the
+  moment the diff includes JS/CSS/Vue/Blade-facing assets, the copied bundle is the
+  *base* build and the browser tier silently exercises the old frontend while
+  reporting a clean pass. Rebuild inside the worktree whenever frontend source is in
+  the diff:
+
+  ```bash
+  ln -sfn "$PWD/node_modules" "$WT/node_modules"   # deps may be symlinked; assets may not
+  (cd "$WT" && npm run build)
+  git -C "$WT" status --short public/build         # must show the new bundle
+  ```
+
+  Symlinking `node_modules` is fine (the bundler resolves it per file at build time);
+  the fatal symlink is `vendor/`, whose autoloader base path is baked in at install.
+- **Frontend interactions prove the UI change, not just the store behind it.** A
+  browser spec that reads state through the framework's public store (`Alpine.store`,
+  a component's data bag) verifies the data layer and can pass while the widget the
+  user actually touches is broken. Drive the rendered control — the checkbox in the
+  filter panel, the button in the toolbar — and assert the observable result. Also
+  assert the invariant the fix was about on the *live* object, not on a copy the test
+  made before the interaction.
+- **An assertion can pass for a reason unrelated to the fix, and the tally still looks
+  clean.** Listener counts, timer registrations, and cache sizes have legitimate
+  baseline values contributed by layers the change never touched. Before flagging a
+  threshold as "data-dependent and flaky", count the real contributors: for Leaflet,
+  only `TileLayer`, `Tooltip`, and the shared `Renderer` emit a `zoomanim` handler —
+  `Path` (and so `Polyline`) does not implement `getEvents` at all, so N polylines add
+  zero listeners. An inflated-headroom claim based on a plausible-sounding class
+  hierarchy is a common and embarrassing false positive.
 - **One test database, one suite at a time.** Whatever the suite config names is the
   database it mutates; a background full run plus anything else against it corrupts both.
 - **A local edit to a file the incoming change also touches blocks the checkout.** If
@@ -93,6 +119,20 @@ A finding is reportable when you have measured it yourself. Treat a subagent's o
 review tool's claim as a hypothesis: run the probe, and discard the claim if it does
 not reproduce. A wrong "confirmed" finding costs more credibility than a missed one,
 and it damages the author's work.
+
+**Verify a subagent's correction before you publish it — and verify your own claims
+with the same standard.** A reviewer agent is not more reliable than you at reading a
+minified bundle; this session one got a real finding right and another wrong, and the
+wrong one was wrong *because* it was plausible-sounding. When an agent contradicts
+something you wrote, treat it as a hypothesis too: re-grep the source and decide on
+the evidence, not on who said it.
+
+**When a published finding turns out to be wrong, retract it on the same thread.**
+Silence leaves the author acting on a non-issue, and a private "actually never mind"
+leaves the wrong claim as the last word. Post the correction inline at the original
+line, name the specific claim that was wrong, state what the source actually shows,
+and say whether the review verdict changes. A retraction is cheap; a bad finding that
+the author already fixed around is not.
 
 ## Regression or pre-existing — always distinguish
 

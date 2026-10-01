@@ -65,23 +65,32 @@ document.
    Before believing any mass-failure count, run `pgrep -af 'pest|artisan test'`,
    stop the strays, and re-run once alone. See
    `references/red-test-attribution.md`.
-7. **A test is evidence only if it fails for the stated reason.** Three ways a test
+7. **A test is evidence only if it fails for the stated reason.** Four ways a test
    lies: the stored data it needs is rewritten before it is ever persisted, so it
    exercises a state the application cannot reach; a multi-column match is
    already satisfied by a sibling field, so the assertion never reaches the code
-   under test; or it asserts only the **first** render of a stateful component, never
-   the state after a round-trip. Prove the fixture survives a write round-trip before
-   writing the test, make every non-target field in it non-matching, and for any
-   stateful component drive one `->call(...)` before asserting. See the pitfalls.
+   under test; it asserts only the **first** render of a stateful component, never
+   the state after a round-trip; or the event/callback the bug lived on is
+   **unreachable from how the test drives the code** — an assertion that can never
+   fail is not a regression guard, it is decoration. Prove the fixture survives a
+   write round-trip before writing the test, make every non-target field in it
+   non-matching, drive one `->call(...)` for any stateful component, and trace the
+   bug's own code path to confirm the test enters it. See the pitfalls.
 8. **Assert the exact rendered value, and assert absence too.** A presence-only
-   match (`toContainText('نفر')`) passes when the value is wrong (`0 نفر`), and an
-   assertion that a negative marker exists (`خالی`, "empty") passes vacuously once a
+   match (`toContainText('نفر')`) passes when the value is wrong (`0 نفر`), and
+   an assertion that a negative marker exists (`خالی`, "empty") passes vacuously once a
    bug makes that marker appear on every row. Pin the number, and for negative
    markers assert both presence on the empty case and absence on the populated one.
 9. **Prove a claimed bug yourself before reporting it.** A probe test whose expected
    value is hardcoded (rather than read from the database) will happily certify broken
    code as correct when a seeder or factory made the real count differ. Print the DB
    count in the same run; a `BEFORE` mismatch means the probe is wrong, not the code.
+10. **Never assert how a third-party library behaves from memory — read the shipped
+   source.** Claims about a library's internals (which classes override a method,
+   what a flag disables, whether a version string means what it looks like) are
+   cheap to make and easy to get wrong, and a wrong one published as a review
+   finding costs more credibility than a missed defect. Locate the vendored or
+   bundled file, grep the actual method, and quote the line you relied on.
 
 ## Procedure
 
@@ -199,6 +208,23 @@ document.
   server, or a borrowed port behind. Wrap the run in your own restore/cleanup
   (copy the original env back, kill the test server) so the developer's environment
   is intact whether the suite is green or red.
+- **An assertion the bug's code path cannot reach is decoration, not a guard.**
+  Symptom: the test passes, and it would also pass on the unfixed code. The usual
+  cause is that the test drives the code through a branch that skips the machinery
+  the defect lived in — asking a library to animate with animation explicitly
+  disabled, so the event that carries the failure is never emitted. Before
+  accepting any regression test (yours or someone else's) as evidence, trace the
+  reported failure to the exact branch that produces it, then check the test
+  actually enters that branch. If it cannot, say so plainly and propose the driver
+  that would (e.g. trigger the UI affordance rather than calling the API with the
+  flag off) — do not let a green run stand in for a guard that does not exist.
+- **A vendored library's version is not the first `version` string in the file.**
+  Bundled/minified builds often carry unrelated version numbers — a WMS/tile
+  parameter default looks exactly like a library version. Find the export
+  assignment that names the library (`<ns>.version=`) and read the file that ships
+  with the app; a vendored lib is frequently absent from `package.json` entirely, so
+  the manifest cannot confirm it. Pin the version in the review so the reader knows
+  which semantics you checked.
 - **View/config caches hide fixes.** After touching routes, config, or Blade, a
   stale cached view or route can make a passing change fail with a bogus error —
   `php artisan view:clear` / `route:clear` / `config:clear` before re-running.
