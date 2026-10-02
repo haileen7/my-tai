@@ -40,6 +40,16 @@ Fetch the URL separately (`git ls-remote <url> <branch>`) to confirm the
 upstream SHA before merging — a fork's own tracking branch can be stale or
 diverged, and comparing against it answers the wrong question.
 
+After fast-forwarding the working branch to canonical, also advance the
+fork's own base branch so it stops lagging canonical — otherwise the fork's
+`beta` and the server branch drift apart again on the next session:
+
+```bash
+git push origin refs/remotes/canonical/<base>:refs/heads/<base>   # fork's base catches up
+git merge --ff-only refs/remotes/canonical/<base>                # working branch advances
+git push origin HEAD:refs/heads/<server-branch>
+```
+
 **Two different local-state blockers abort a `--ff-only` merge.** Diagnose which
 one you hit by reading the exact error line before acting.
 
