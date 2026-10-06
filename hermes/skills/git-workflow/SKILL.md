@@ -40,6 +40,21 @@ Fetch the URL separately (`git ls-remote <url> <branch>`) to confirm the
 upstream SHA before merging — a fork's own tracking branch can be stale or
 diverged, and comparing against it answers the wrong question.
 
+User preference: the fork's `beta` must be EXACTLY the canonical upstream `beta` — use `--force` when the fork has diverged, not a ff merge:
+
+```bash
+git push origin refs/remotes/canonical/<base>:refs/heads/<base> --force
+git fetch origin <base> && git merge --ff-only origin/<base>   # working branch catches up
+```
+
+Pushing a working branch to the fork by the same refspec creates it on the
+remote when missing — `git push origin <server-branch>` is enough; no separate
+`git branch --track` / `git push -u` dance needed:
+
+```bash
+git push origin <server-branch>   # creates origin/<server-branch> if absent
+```
+
 After fast-forwarding the working branch to canonical, also advance the
 fork's own base branch so it stops lagging canonical — otherwise the fork's
 `beta` and the server branch drift apart again on the next session:
@@ -97,6 +112,30 @@ Check `git log canonical/<base> -- <path>` before deleting anything: if the comm
 trajectory is delete + add to `.gitignore`, the correct move is to let the merge
 land and drop the local copy only if it still exists afterwards. Deleting eagerly
 as a reflex removes a file the user may still want.
+
+### Sync check when the canonical base has no named remote
+
+Some servers have only their own fork configured (`git remote -v` shows one remote and no
+canonical entry), so the familiar `git fetch <remote> <branch>` has nothing to fetch from
+and a sync "completed" with zero output can mean the base was never actually contacted.
+Establish the canonical ref by URL instead, then verify it is genuinely reachable:
+
+```bash
+git fetch https://github.com/<owner>/<repo>.git <base>:refs/remotes/canonical/<base>
+git ls-remote https://github.com/<owner>/<repo>.git <base>   # independent SHAs must agree
+git merge-base --is-ancestor refs/remotes/canonical/<base> HEAD && echo "not behind"
+```
+
+Read `[up to date]` as confirmation the ref was contacted and unchanged; an empty output
+with no `[up to date]` line means nothing was fetched. Compare `refs/remotes/canonical/<base>`
+against the FORK's own base branch too — they can differ, and a fetch that only proves the
+fork is self-consistent answers nothing about the canonical base.
+
+Report the sync as up to date only after the ancestry check, and state the branch's actual
+commits ahead of base explicitly ("N commits ahead, 0 behind") rather than implying work was
+done. When the branch is already canonical plus local commits and `origin/<branch>` matches
+HEAD, there is nothing to commit or push for the sync itself — say so instead of
+manufacturing an empty merge commit.
 
 ### Nested `.git` directories when copying content
 

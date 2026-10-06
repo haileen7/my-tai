@@ -18,6 +18,7 @@ Operational patterns discovered during real improve skill executions. Supplement
 - Asked to give an opinion, verdict, or review on an existing plan, proposal, or tracking issue — including one written by another agent or a teammate.
 - Publishing a verdict into a GitHub discussion thread (discussions are not issues; the posting path differs).
 - Asked to give an opinion now and again after a delay — a scheduled re-check on a live thread, where the second answer must respond to what landed in between.
+- Asked to run the audit on a recurring schedule and file the top finding as a GitHub issue each time (every N minutes, weekly) — see "Recurring Cron Audit" and `references/cron-prompt-scanner.md`.
 
 ## Issue Registration (`--issues`)
 
@@ -76,6 +77,28 @@ Some asks are "give your verdict now, then give it again in N minutes" — the p
 5. Report the job id and fire time to the user in this session; the follow-up's own final response is what lands in the chat.
 
 Command recipes, the `script` filename rule, and the cron/credential pitfalls are in `references/scheduled-recheck.md`.
+
+## Recurring Cron Audit (one issue per run)
+
+The recurring form of this work: "every N minutes, audit the repo with improve and file the single most important finding as an issue in the upstream repo." Same two-phase discipline as the thread re-check, but recurring instead of one-shot.
+
+### Procedure
+
+1. Create the job with `cronjob_manage action=create`, `skills: ['improve']`, `workdir` set to the audited repo, `schedule` in interval form (`'every 30m'` — not a hand-computed timestamp), and `continuity: true`. Continuity is what carries the previous run's output into the next one; it is the first line of defence against re-filing the same finding.
+2. The prompt must be self-contained (fresh session, no chat context) and must name the canonical upstream `owner/repo` explicitly — a recurring job cannot ask which repo it meant.
+3. Bake the dedupe rule into the prompt as a command, not as a wish: list every issue (`gh issue list --repo owner/repo --state all`), then keyword-search the candidate's title before creating anything. "Don't file duplicates" without a command produces duplicates.
+4. State the blast radius in the prompt: exactly one issue per run, no code edits, no commits, no local file changes.
+5. Have the final response report the issue title + URL, or the reason nothing was filed. That response is the only thing the user sees.
+6. Test the job once with `cronjob_manage action=run` before trusting the schedule. The manual run is asynchronous: the call returns a delegation id immediately, and the job's outcome re-enters the conversation later. That outcome — not the tool response — is the pass/fail signal.
+
+### Pitfalls
+
+- **A skill body can poison its own cron job.** The runtime scans the ASSEMBLED prompt (skill content included), so a skill that quotes an injection payload verbatim as a security example — `"ignore previous instructions"` is the classic — blocks every job that loads it, regardless of what the prompt says. When a cron job fails with `Blocked: prompt matches threat pattern`, scan the SKILL.md before touching the prompt; see `references/cron-prompt-scanner.md`. Rewriting the example to describe the attack without reproducing the trigger phrase is the fix — do not strip the security rule itself.
+- **Non-Latin prompts are not the cause; invisible characters are.** ZWNJ (U+200C) and friends are rejected at create/update time even in perfectly innocent Persian text. Type prompts without zero-width joiners before suspecting your wording.
+- **One job runs at a time.** A second `action=run` against a job that is still executing returns `executed: false` with an already-running skip instead of starting a second run. A skipped verification is not a passing one — wait for the in-flight run's outcome, then fire again if you still need a second data point.
+- **A successful `action=run` response does not mean the job worked.** The returned job record carries `last_status` and `last_error` from the PREVIOUS run until the new one finishes, so those fields still read `error` right after you fixed the cause. Read them as stale; never quote them as the current run's verdict.
+- **Clearing the scanner block proves only that the gate opens.** The scanner functions passing on the skill body and the prompt means the job can reach the model, not that it audited or filed anything. Only a real outcome — an issue URL, or the failure it hit — confirms the job works. See `references/cron-prompt-scanner.md`.
+- **Do not shorten the prompt to get past a scanner.** Rewriting the task to dodge a block hides the real fault and leaves the job doing something other than what was asked. Find what actually matched.
 
 ## Subagent Audit Pattern
 
