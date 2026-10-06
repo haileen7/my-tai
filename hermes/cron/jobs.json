@@ -27,15 +27,15 @@
       "schedule_display": "every 30m",
       "repeat": {
         "times": null,
-        "completed": 8
+        "completed": 14
       },
       "enabled": true,
       "state": "scheduled",
       "paused_at": null,
       "paused_reason": null,
       "created_at": "2026-10-06T09:53:40.101989+00:00",
-      "next_run_at": "2026-10-06T14:58:04.424794+00:00",
-      "last_run_at": "2026-10-06T13:57:40.995439+00:00",
+      "next_run_at": "2026-10-06T20:40:34.037385+00:00",
+      "last_run_at": "2026-10-06T19:40:22.396558+00:00",
       "last_status": "ok",
       "last_error": null,
       "last_delivery_error": null,
@@ -57,16 +57,16 @@
       "enabled_toolsets": null,
       "workdir": "/home/runner/h-dashboard",
       "fire_claim": {
-        "at": "2026-10-06T14:33:05.407071+00:00",
-        "by": "runnervm8df0l:20721:4f5bc68426e74841a7957069183b658f"
+        "at": "2026-10-06T20:13:34.777190+00:00",
+        "by": "runnervm8df0l:20124:ffc5c0bd6a874b4abbc131f4c70f0fe0"
       },
       "last_dispatch": {
-        "scheduled_at": "2026-10-06T14:27:40.995439+00:00",
-        "dispatched_at": "2026-10-06T14:28:04.413242+00:00",
-        "lateness_seconds": 23.4,
+        "scheduled_at": "2026-10-06T20:10:22.396558+00:00",
+        "dispatched_at": "2026-10-06T20:10:34.024603+00:00",
+        "lateness_seconds": 11.6,
         "kind": "on_time"
       }
     }
   ],
-  "updated_at": "2026-10-06T14:33:05.407563+00:00"
+  "updated_at": "2026-10-06T20:13:34.778024+00:00"
 }
