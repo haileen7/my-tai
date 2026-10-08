@@ -12,4 +12,4 @@ scripts/e2e-test.sh: not concurrency-safe, never run two; swaps .env and .env.de
 §
 Map perf fixed (adc561f): bottleneck was main-thread rendering (/map pan 620→52ms). Fix: circleMarker+lazy popup, icon cache, memo depth, canvas lines, dead loadStats removed.
 §
-Cron blocked by scanner: a SKILL.md quoting a literal classic injection example phrase trips tools/cronjob_prompt_scan._CRON_SKILL_ASSEMBLED, so EVERY cron job using that skill fails regardless of prompt. Fix = reword the skill example, not the prompt. Persian cron prompts must avoid U+200C ZWNJ. Pre-test with _scan_cron_prompt / _scan_cron_skill_assembled in ~/.hermes/hermes-agent.
+Cron blocked by scanner: a SKILL.md quoting a literal classic injection example phrase trips tools/cronjob_prompt_scan._CRON_SKILL_ASSEMBLED, so EVERY cron job using that skill fails regardless of prompt. Fix = reword the skill example, not the prompt. Persian cron prompts AND gh issue bodies must avoid U+200C ZWNJ (bidi guard blocks the command) — write improve-issue bodies in English.
