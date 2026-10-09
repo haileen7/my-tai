@@ -161,14 +161,14 @@
     "created_by": null,
     "last_patched_at": null,
     "last_reused_patch_generation": 0,
-    "last_used_at": "2026-10-09T17:21:57.550962+00:00",
-    "last_viewed_at": "2026-10-09T17:21:57.549821+00:00",
+    "last_used_at": "2026-10-09T23:20:14.475845+00:00",
+    "last_viewed_at": "2026-10-09T22:45:53.363784+00:00",
     "patch_count": 0,
     "patch_generation": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 74,
-    "view_count": 27
+    "use_count": 85,
+    "view_count": 31
   },
   "improve-workflows": {
     "archived_at": null,
