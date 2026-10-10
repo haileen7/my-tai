@@ -6,14 +6,14 @@
     "first_seen_at": null,
     "last_patched_at": null,
     "last_reused_patch_generation": 0,
-    "last_used_at": "2026-09-21T21:38:22.587000+00:00",
-    "last_viewed_at": "2026-09-21T21:38:22.585950+00:00",
+    "last_used_at": "2026-10-10T07:31:05.596427+00:00",
+    "last_viewed_at": "2026-10-10T07:31:05.594299+00:00",
     "patch_count": 0,
     "patch_generation": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 1,
-    "view_count": 1
+    "use_count": 2,
+    "view_count": 2
   },
   "collective-wisdom-install": {
     "archived_at": null,
@@ -161,14 +161,14 @@
     "created_by": null,
     "last_patched_at": null,
     "last_reused_patch_generation": 0,
-    "last_used_at": "2026-10-10T05:44:39.191909+00:00",
-    "last_viewed_at": "2026-10-10T04:38:46.427526+00:00",
+    "last_used_at": "2026-10-10T11:41:29.440640+00:00",
+    "last_viewed_at": "2026-10-10T09:42:10.159219+00:00",
     "patch_count": 0,
     "patch_generation": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 96,
-    "view_count": 35
+    "use_count": 110,
+    "view_count": 42
   },
   "improve-workflows": {
     "archived_at": null,
