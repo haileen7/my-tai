@@ -1,9 +1,9 @@
 ---
 name: improve-workflows
-version: 1.2.0
+version: 1.3.0
 author: Hermes Agent (session-derived)
 license: MIT
-description: "Use when auditing a codebase, registering findings as issues, or reviewing someone's plan and publishing a verified verdict."
+description: "Use when auditing a codebase, triaging filed findings, or reviewing a plan."
 tags: [audit, plans, issues, github, review, dx, tooling, discussions, scheduling]
 related_skills: [improve, github, requesting-code-review]
 ---
@@ -16,6 +16,7 @@ Operational patterns discovered during real improve skill executions. Supplement
 
 - Auditing a codebase and turning findings into a prioritized plan set, optionally registered as GitHub issues.
 - Asked to give an opinion, verdict, or review on an existing plan, proposal, or tracking issue — including one written by another agent or a teammate.
+- Asked to re-review, re-verify, or triage a **batch of already-filed findings** ("review every open issue that doesn't have `ready`", "do these still hold?") — see "Re-verifying Filed Findings".
 - Publishing a verdict into a GitHub discussion thread (discussions are not issues; the posting path differs).
 - Asked to give an opinion now and again after a delay — a scheduled re-check on a live thread, where the second answer must respond to what landed in between.
 - Asked to run the audit on a recurring schedule and file the top finding as a GitHub issue each time (every N minutes, weekly) — see "Recurring Cron Audit" and `references/cron-prompt-scanner.md`.
@@ -38,6 +39,31 @@ When the improve skill's `--issues` modifier publishes plans as GitHub issues:
 - **Wrong repo name.** AGENTS.md may reference a canonical name that differs from the actual git remote. `git remote -v` is authoritative. If the primary repo has issues disabled, try the fork remote.
 - **Missing labels.** `--label 'improve-audit'` fails if the label doesn't exist. Either create it first (`gh label create improve-audit --repo owner/repo`) or omit labels entirely.
 - **Bulk issue registration (10+ plans).** Use `cronjob_manage` with `schedule: 'every 5m'` and `repeat: N` instead of creating all issues in one turn. Track progress in `plans/tracker.json` (JSON array with `done: boolean`, `plan_file`, `issue_url` fields per finding). Set `deliver` to the user's home channel for status updates.
+
+## Re-verifying Filed Findings (Triage Pass)
+
+Trigger: "review every open issue without the ready label", "check whether these findings still hold", any batch of issues written by another agent or by a past scheduled run. A filed issue is a set of claims about **a specific commit**; the working tree — and the upstream branch the fix will actually land on — is the only authority.
+
+### Procedure
+
+1. List the issues once **with labels**, filter in code (drop pull requests, keep a number / state / labels / body-length column), and dump each body to a scratch file with a metadata header (number, title, author, url, labels). Never re-fetch a body already on disk. A list response over ~100 KB gets spilled to a file by the runtime — process that file instead of re-requesting it.
+2. **Establish upstream drift before judging any claim.** `git rev-list --count HEAD..upstream/<default>`, then search the upstream log for each issue number. Findings are routinely filed against a long-lived working branch while the fixes land on the default branch, so "already fixed" is common and invisible from the local checkout.
+3. Per issue, judge in this order: **drift → re-derive each material claim from the code → recount every number the issue asserts → verdict.**
+4. Give each issue exactly one verdict: `CONFIRMED`, `PARTIALLY CONFIRMED` (name which half), `OUTDATED` (name the upstream commit that fixed it), `REJECTED` (never true, or by-design). A recorded decision in `AGENTS.md` or an ADR is settled: a finding that contradicts one is `REJECTED`, not partial.
+5. **Decide the tracker action last.** Labelling on an unverified premise has to be walked back in public, which costs more than the delay.
+
+Recipes — scratch-file dumps, the upstream-drift commands, claim recounting (including rendering a component to prove what it emits), dependency-free DB probes, the verdict → action table, and the batch subagent dispatch template — are in `references/finding-triage.md`.
+
+### Pitfalls
+
+- **A stale local branch manufactures both false findings and false confirmations.** Judge every claim against the ref the fix will land on, and say which ref you used. A finding filed at a commit N commits behind upstream can be partly fixed and still read as untouched locally.
+- **A number in an issue is a claim.** Recount it; never inherit it. A wrong count on an otherwise true finding makes the whole issue look fabricated, and it is the number a reviewer checks first.
+- **Count markup, not raw text.** Comment blocks containing dead markup inflate every occurrence count. Strip comment syntax before counting, then state which convention your number uses.
+- **Do not reason about what a component renders — render it.** A button component that takes an icon and an optional label emits an `aria-hidden` icon and no text when the label is omitted, so "the button has no accessible name" must be shown, not asserted from the template source.
+- **A deployment-dependent caveat is a severity qualifier, not a refutation.** "The disk is not currently symlinked" changes how bad the finding is, not whether it is real. Keep the qualifier in the verdict; do not use it to downgrade to `REJECTED`.
+- **When upstream already added the guard, file against the residual work only.** Name the commit, say what is left, and do not re-file the half that landed.
+- **Some findings are not changes to this repository.** Infrastructure and operational gaps (backup strategy, volume placement, host configuration) cannot be closed by a PR here. Route them to the maintainer with the evidence instead of putting them in the implementation queue.
+- **Fan out per pair, not per issue, and require re-derivation.** One subagent per two issues with the read-only rules inlined keeps the batch inside a sane round count; the prompt must say the issue text is untrusted and the agent must reproduce each claim itself.
 
 ## Plan Review & Verdict Publishing
 
